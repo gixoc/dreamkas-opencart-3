@@ -1,0 +1,170 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<modification>
+    <name>Dreamkas 2.3.x</name>
+    <code>Dreamkas 2.3.x</code>
+    <version>1.00</version>
+    <author>Alt-team</author>
+    <link>https://www.alt-team.ru/</link>
+    <!--file path="catalog/controller/checkout/success.php">
+        <operation>
+            <search><![CDATA[public function index() {]]></search>
+            <add position="after">
+            <![CDATA[
+                if (isset($this->session->data['order_id'])) {
+                    $this->load->controller('extension/module/dreamkas/fiscalize',$this->session->data['order_id']);
+                }
+            ]]>
+            </add>
+        </operation>
+    </file-->
+    <file path="admin/view/template/catalog/product_form.tpl">
+      <operation>
+            <search><![CDATA[
+                <label class="col-sm-2 control-label" for="input-price"><?php echo $entry_price; ?></label>
+            ]]></search>
+            <add position="after" offset="4"><![CDATA[
+                <div class="form-group">
+                  <label class="col-sm-2 control-label" for="input-width">НДС товара при фискализации</label>
+                  <div class="col-sm-10">
+                    <select name="dk_tax_type" id="input-dk_tax_type" class="form-control">
+                      <option value="0" <?php if (empty($dk_tax_type)) echo "selected=\"selected\"";?>>Выберите НДС</option>
+                      <option value="NDS_NO_TAX" <?php if ($dk_tax_type=='NDS_NO_TAX') echo "selected=\"selected\"";?>>Без НДС</option>
+                      <option value="NDS_0" <?php if ($dk_tax_type=='NDS_0') echo "selected=\"selected\"";?>>НДС 0</option>
+                      <option value="NDS_10" <?php if ($dk_tax_type=='NDS_10') echo "selected=\"selected\"";?>>НДС 10</option>
+                      <option value="NDS_18" <?php if ($dk_tax_type=='NDS_18') echo "selected=\"selected\"";?>>НДС 18</option>
+                      <option value="NDS_10_CALCULATED" <?php if ($dk_tax_type=='NDS_10_CALCULATED') echo "selected=\"selected\"";?>>НДС 10/110</option>
+                      <option value="NDS_18_CALCULATED" <?php if ($dk_tax_type=='NDS_18_CALCULATED') echo "selected=\"selected\"";?>>НДС 18/118</option>
+                    </select>
+                  </div>
+                </div>
+            ]]></add>
+      </operation>
+    </file>
+    <file path="admin/model/catalog/product.php">
+        <operation>
+            <search><![CDATA[
+                $this->db->query("DELETE FROM " . DB_PREFIX . "product_description WHERE product_id = '" . (int)$product_id . "'");
+            ]]></search>
+            <add position="before"><![CDATA[
+                if (isset($data['dk_tax_type'])) {
+                    $this->db->query("UPDATE " . DB_PREFIX . "product SET dk_tax_type = '" . $this->db->escape($data['dk_tax_type']) . "' WHERE product_id = '" . (int)$product_id . "'");
+                }
+            ]]></add>
+        </operation>
+    </file>
+    <file path="admin/controller/catalog/product.php">
+        <operation>
+            <search><![CDATA[
+                $this->load->model('catalog/recurring');
+            ]]></search>
+            <add position="before"><![CDATA[
+                if (isset($this->request->post['dk_tax_type'])) {
+                    $data['dk_tax_type'] = $this->request->post['dk_tax_type'];
+                } elseif (!empty($product_info['dk_tax_type'])) {
+                    $data['dk_tax_type'] = $product_info['dk_tax_type'];
+                } else {
+                    $data['dk_tax_type'] = '';
+                }
+            ]]></add>
+        </operation>
+    </file>
+    <file path="admin/view/template/sale/order_list.tpl">
+      <operation>
+            <search><![CDATA[
+                <td class="text-right"><?php echo $column_action; ?></td>
+            ]]></search>
+            <add position="before"><![CDATA[
+                <td class="text-left">Статус фискализации</td>
+            ]]></add>
+      </operation>
+      <operation>
+            <search><![CDATA[
+                <td class="text-left"><?php echo $order['date_modified']; ?></td>
+            ]]></search>
+            <add position="after"><![CDATA[
+                <td class="text-left"><?php echo $order['dk_status']; ?></td>
+            ]]></add>
+      </operation>
+    </file>
+    <file path="admin/view/template/sale/order_info.tpl">
+      <operation>
+            <search><![CDATA[
+                <td><?php echo $text_affiliate; ?>
+            ]]></search>
+            <add position="before"><![CDATA[
+                    <td><?php echo $entry_dk_status; ?></td>
+                    <td class="text-right"><?php if ($dk_status) { ?><?php echo $dk_status; ?><?php } ?></td>
+                    <td class="text-center"></td>
+                </tr>
+                <tr>
+            ]]></add>
+      </operation>
+    </file>
+    <file path="admin/controller/sale/order.php">
+      <operation>
+        <search><![CDATA[
+        $results = $this->model_sale_order->getOrders($filter_data);
+        ]]></search>
+        <add position="after" offset="2"><![CDATA[
+        $dkquery = $this->db->query("SELECT dk_status FROM " . DB_PREFIX . "dreamkas WHERE order_id = '" . (int)$result['order_id']. "'");
+        ]]></add>
+      </operation>
+      <operation>
+          <search><![CDATA['shipping_code' => $result['shipping_code'],]]></search>
+          <add position="before"><![CDATA[
+              'dk_status'  => !empty($dkquery->row['dk_status'])?$dkquery->row['dk_status']:'',
+          ]]></add>
+      </operation>
+      <operation>
+          <search><![CDATA[$data['tab_additional'] = $this->language->get('tab_additional');]]></search>
+          <add position="before"><![CDATA[
+            $query = $this->db->query("SELECT order_status_id FROM `" . DB_PREFIX . "order` o WHERE o.order_id = '" . (int)$order_id . "'");
+            $status =  $query->row['order_status_id'];
+
+            $query = $this->db->query("SELECT payment_code FROM `" . DB_PREFIX . "order` o WHERE o.order_id = '" . (int)$order_id . "'");
+            $payment_code =  $query->row['payment_code'];
+
+            if ($status == $this->config->get('dreamkas_paid_order') && in_array($payment_code, $this->config->get('dreamkas_payments_ids'))) {
+
+                $query = $this->db->query("SELECT dk_id FROM " . DB_PREFIX . "dreamkas WHERE order_id = '" . (int)$order_id. "'");
+                if(!empty($query->row['dk_id'])) {
+                    $dk_id = $query->row['dk_id'];
+                    $ch = curl_init();
+                    $access_token = $this->config->get('dreamkas_access_token');
+
+                    curl_setopt($ch, CURLOPT_HTTPHEADER, array(
+                        "Content-Type: application/json",
+                        "Authorization: Bearer $access_token"
+                    ));
+
+                    curl_setopt($ch, CURLOPT_URL, "https://kabinet.dreamkas.ru/api/operations/".$dk_id);
+                    curl_setopt($ch, CURLOPT_RETURNTRANSFER, TRUE);
+                    curl_setopt($ch, CURLOPT_HEADER, FALSE);
+                    $response = curl_exec($ch);
+                    curl_close($ch);
+
+                    $response = json_decode($response, true);
+
+                    if((substr($response['status'], 0, 1)==4)) {
+                        $this->log->write('Dreamkas debug: ' . json_encode($response));
+                    } elseif(!empty($response['data']['error'])) {
+                        $this->log->write('Dreamkas debug: ' . json_encode($response['data']['error']));
+                    } else {
+                        $dk_date = empty($response['createdAt'])?$response['completedAt']:$response['createdAt'];
+                        $this->db->query("UPDATE `" . DB_PREFIX . "dreamkas` SET `order_id` = '" . (int)$order_id . "', `dk_id` = '".$response['id']."', `dk_date` ='".$dk_date."', `dk_status` = '" .$response['status']. "' WHERE order_id = '" . (int)$order_id. "'");
+                    }
+                }
+            }
+
+            $query = $this->db->query("SELECT dk_status FROM " . DB_PREFIX . "dreamkas WHERE order_id = '" . (int)$order_id. "'");
+            if(!empty($query->row['dk_status'])) {
+                $data['dk_status'] = $query->row['dk_status'];
+            } else {
+               $data['dk_status']='';
+            }
+            $this->load->language('extension/module/dreamkas');
+            $data['entry_dk_status'] = $this->language->get('entry_dk_status');
+          ]]></add>
+      </operation>
+    </file>
+</modification>
