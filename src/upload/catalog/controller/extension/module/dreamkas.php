@@ -1,34 +1,29 @@
 <?php
-class ControllerExtensionModuleDreamkas extends Controller
-{
-
-	public function check($data)
-	{
-		//
-	}
-
-	public function index($route, $data)
-	{
-		// fn_write_r($this->session->data, $route, $data);
-		if (!empty($data[0])) {
+class ControllerExtensionModuleDreamkas extends Controller {
+	public function index(&$route, &$data) {
+		if (isset($data[0]) && !empty($data[0])) {
 			$this->load->language('extension/module/dreamkas');
+
 			$order_id = $data[0];
 			$query = $this->db->query("SELECT order_status_id FROM `" . DB_PREFIX . "order` o WHERE o.order_id = '" . (int) $order_id . "'");
 			$status = $query->row['order_status_id'];
 			$query = $this->db->query("SELECT payment_code FROM `" . DB_PREFIX . "order` o WHERE o.order_id = '" . (int) $order_id . "'");
 			$payment_code = $query->row['payment_code'];
-			// fn_write_r($data, $status, $this->config->get('dreamkas_paid_order'), $payment_code, $this->config->get('dreamkas_payments_ids'));
-			// if (in_array($status, $this->config->get('sms_alert_processing_status'))) {
-			if ($status == $this->config->get('dreamkas_paid_order') && in_array($payment_code, $this->config->get('dreamkas_payments_ids'))) {
+
+			if ($status == $this->config->get('module_dreamkas_paid_order') && in_array($payment_code, $this->config->get('module_dreamkas_payments_ids'))) {
 				$this->load->model('checkout/order');
+
 				$order_info = $this->model_checkout_order->getOrder($order_id);
+
 				$query = $this->db->query("SELECT * FROM " . DB_PREFIX . "order_product WHERE order_id = '" . (int) $order_id . "'");
 				$products = $query->rows;
 				$query = $this->db->query("SELECT * FROM " . DB_PREFIX . "order_total WHERE order_id = '" . (int) $order_id . "' AND code = 'shipping' ORDER BY sort_order");
+
 				$shipping = $query->rows;
-				$tax_type = $this->config->get('dreamkas_tax_type');
+				$tax_type = $this->config->get('module_dreamkas_tax_type');
 				$tax_sum = 0;
 				$items = array();
+
 				foreach ($products as $product) {
 					$query = $this->db->query("SELECT dk_tax_type FROM " . DB_PREFIX . "product WHERE product_id = '" . (int) $product['product_id'] . "'");
 					$dk_tax_type = $query->row;
@@ -44,6 +39,7 @@ class ControllerExtensionModuleDreamkas extends Controller
 					);
 					$tax_sum += $product['tax'] * $product['quantity'];
 				}
+
 				if (!empty($shipping)) {
 					$query = $this->db->query("SELECT * FROM " . DB_PREFIX . "order_total WHERE order_id = '" . (int) $order_id . "' AND code = 'tax' ORDER BY sort_order");
 					$tax_total = reset($query->rows);
@@ -66,12 +62,12 @@ class ControllerExtensionModuleDreamkas extends Controller
 						}
 					}
 				}
-				// fn_write_die($order_id, $tax_sum, $query, $items, $shipping);
+
 				$request = array(
-					"deviceId" => $this->config->get('dreamkas_device_id'),
+					"deviceId" => $this->config->get('module_dreamkas_device_id'),
 					"type" => "SALE",
 					"timeout" => 180,
-					"taxMode" => $this->config->get('dreamkas_tax_mode'),
+					"taxMode" => $this->config->get('module_dreamkas_tax_mode'),
 					"positions" => $items,
 					"payments" => array(
 						array(
@@ -81,29 +77,30 @@ class ControllerExtensionModuleDreamkas extends Controller
 					),
 					"attributes" => array(
 						"email" => $order_info['email'],
-						"phone" => $order_info['telephone'] // "+71239994499"
+						"phone" => $order_info['telephone']
 					),
 					"total" => array(
 						"priceSum" => $order_info['total'] * 100
 					)
 				);
-				// fn_write_die($request, $products, $shipping, $order_info);
+
 				$ch = curl_init();
-				$access_token = $this->config->get('dreamkas_access_token');
+				$access_token = $this->config->get('module_dreamkas_access_token');
 				curl_setopt($ch, CURLOPT_HTTPHEADER, array(
 					"Content-Type: application/json",
 					"Authorization: Bearer " . $access_token
 				));
 				curl_setopt($ch, CURLOPT_URL, "https://kabinet.dreamkas.ru/api/receipts");
-				curl_setopt($ch, CURLOPT_RETURNTRANSFER, TRUE);
-				curl_setopt($ch, CURLOPT_HEADER, FALSE);
-				curl_setopt($ch, CURLOPT_POST, TRUE);
+				curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+				curl_setopt($ch, CURLOPT_HEADER, false);
+				curl_setopt($ch, CURLOPT_POST, true);
 				curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($request));
 				$response = curl_exec($ch);
 				curl_close($ch);
+
 				if (!empty($response)) {
 					$response = json_decode($response, true);
-					// $response = json_decode('{"id": "5956889136fdd7733f19cfe6","createdAt": "2017-06-20 12:01:47.990Z","status": "PENDING"}', true);
+
 					if ((substr($response['status'], 0, 1) == 4)) {
 						$this->log->write('Dreamkas debug: ' . json_encode($response));
 					} else {
